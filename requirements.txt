@@ -1,3 +1,7 @@
 google-genai
 python-dotenv
 google-generativeai
+
+fastapi
+uvicorn
+python-multipart
