@@ -16,51 +16,49 @@ def call_llm(prompt):
     )
     return response.text
 
-def process_file(file_path):
-    file_content = read_file(file_path)
-    
-    run_result = run_python_file(file_path)
-    
-    prompt = (
-        "Here is a Python script:"
-        "\n---\n"
-        f"{file_content}"
-        "\n---\n"
-        "Here is its output:\n"
-        f"STDOUT:\n{run_result['stdout']}\n"
-        "\n---\n"
-        f"STDERR:\n{run_result['stderr']}\n"
-        f"Exit Code: {run_result['exit_code']}\n\n"
-        "If there are any syntax errors, issues, or problems in the code or output, "
-        "fix the code and return ONLY the corrected code. "
-        "Add a comment wherever an update is made."
-        "If there are no issues, return the original code."
-    )
+def process_file(file_path, max_attempts=2):
+    history = []
+    for attempt in range(1, max_attempts + 1):
+        file_content = read_file(file_path)
+        run_result = run_python_file(file_path)
+        prompt = (
+            f"Attempt {attempt}:\n"
+            "Here is a Python script:\n"
+            "---\n"
+            f"{file_content}\n"
+            "---\n"
+            "Here is its output:\n"
+            f"STDOUT:\n{run_result['stdout']}\n"
+            "---\n"
+            f"STDERR:\n{run_result['stderr']}\n"
+            f"Exit Code: {run_result['exit_code']}\n\n"
+            "If there are any syntax errors, issues, or problems in the code or output, "
+            "fix the code and return ONLY the corrected code. "
+            "Add a comment wherever an update is made. "
+            "If there are no issues, return the original code."
+        )
 
-    # print("LLM Prompt:")
-    # print(prompt)    
-    # return {
-    #     "file_content": file_content,
-    #     "run_result": run_result,
-    #     "llm_prompt": prompt
-    # }
-    
-    llm_response = call_llm(prompt)
-    # If the LLM response is different from the original, update the file
-    if llm_response.strip() != file_content.strip():
-        with open(file_path, "w", encoding="utf-8") as f:
-            f.write(llm_response)
-        fixed = True
-    else:
-        fixed = False
+        llm_response = call_llm(prompt)
+        fixed = llm_response.strip() != file_content.strip()
+        history.append({
+            "attempt": attempt,
+            "file_content": file_content,
+            "run_result": run_result,
+            "llm_prompt": prompt,
+            "llm_response": llm_response,
+            "file_fixed": fixed
+        })
 
-    print("LLM fix state:", fixed)
+        if fixed:
+            with open(file_path, "w", encoding="utf-8") as f:
+                f.write(llm_response)
+        else:
+            # If no fix was made, stop the loop
+            break
 
     return {
-        "file_content": file_content,
-        "run_result": run_result,
-        "llm_prompt": prompt,
-        "llm_response": llm_response,
-        "file_fixed": fixed
+        "history": history,
+        "final_status": "success" if not history[-1]["file_fixed"] else "max_attempts_reached"
     }
+
 
