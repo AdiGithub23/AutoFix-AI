@@ -1,3 +1,6 @@
 _autofixai
+
+__pycache__/
+
 .env
 
