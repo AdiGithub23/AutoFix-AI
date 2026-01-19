@@ -1,8 +1,7 @@
 import os
-import json
 from dotenv import load_dotenv
 from google import genai
-from src.agent.agent_functions import read_file, run_python_file
+from src.agent.agent_functions import read_file, run_python_file, write_file, get_history_log_path, load_history_log, save_history_log
 
 def call_llm(prompt):
     load_dotenv()
@@ -17,41 +16,43 @@ def call_llm(prompt):
     )
     return response.text
 
-def get_history_log_path(file_path):
-    dir_name = os.path.dirname(file_path)
-    # print("Directory name:", dir_name)
-    base_name = os.path.basename(file_path)
-    # print("Base name:", base_name)
-    log_name = f"{base_name}_history_log.json"
-    # print("Log name:", log_name)
-    return os.path.join(dir_name, log_name)
+def get_last_session_status(session_history):
+    if not session_history:
+        return None
+    last_session = session_history[-1]
+    attempts = last_session.get("session_history", [])
+    if not attempts:
+        return None
+    last_attempt = attempts[-1]
+    return {
+        "file_fixed": last_attempt.get("file_fixed", False),
+        "run_result": last_attempt.get("run_result", {}),
+        "llm_response": last_attempt.get("llm_response", ""),
+        "attempts_count": len(attempts)
+    }
 
-def load_history_log(log_path):
-    if os.path.exists(log_path):
-        with open(log_path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    return []
-
-def save_history_log(log_path, new_session):
-    print(f"Saving history log to: {log_path}")
-    try:
-        if os.path.exists(log_path):
-            with open(log_path, "r", encoding="utf-8") as f:
-                try:
-                    history = json.load(f)
-                except Exception:
-                    history = []
-        else:
-            history = []
-        history.append(new_session)
-        with open(log_path, "w", encoding="utf-8") as f:
-            json.dump(history, f, indent=2)
-    except Exception as e:
-        print(f"Failed to save history log: {e}")
 
 def process_file(file_path, max_attempts=2):
     log_path = get_history_log_path(file_path)
     session_history = load_history_log(log_path)
+
+    last_status = get_last_session_status(session_history)
+    if last_status and not last_status["file_fixed"] and last_status["attempts_count"] >= max_attempts:
+        return {
+            "skipped": True,
+            "reason": "Previous session reached max attempts and did not fix the file. Skipping further attempts.",
+            "last_status": last_status
+        }
+
+    repeated_error = None
+    if session_history and len(session_history) > 1:
+        prev_errors = [
+            s["session_history"][-1]["run_result"]["stderr"]
+            for s in session_history
+            if s["session_history"] and "stderr" in s["session_history"][-1]["run_result"]
+        ]
+        if len(prev_errors) >= 2 and prev_errors[-1] and prev_errors[-1] == prev_errors[-2]:
+            repeated_error = prev_errors[-1]
 
     history = []
     for attempt in range(1, max_attempts + 1):
@@ -78,6 +79,12 @@ def process_file(file_path, max_attempts=2):
             "Add a comment wherever an update is made. "
             "If there are no issues, return the original code."
         )
+        
+        if repeated_error:
+            prompt += (
+                f"\n\nNote: The following error has occurred repeatedly in previous attempts:\n{repeated_error}\n"
+                "Please try a different approach to fix this recurring issue."
+            )
 
         llm_response = call_llm(prompt)
         if llm_response is None:
@@ -97,15 +104,14 @@ def process_file(file_path, max_attempts=2):
         history.append(attempt_record)
 
         if fixed:
-            with open(file_path, "w", encoding="utf-8") as f:
-                f.write(llm_response)
+            write_file(file_path, llm_response)
         else:
             break
 
-    session_history.append({
-        "file_path": file_path,
-        "session_history": history
-    })
+    # session_history.append({
+    #     "file_path": file_path,
+    #     "session_history": history
+    # })
     
     save_history_log(log_path, {
         "file_path": file_path,
