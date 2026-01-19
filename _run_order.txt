@@ -2,3 +2,4 @@ uv venv _autofixai
 
 _autofixai\Scripts\activate
 
+uv pip install -r requirements.txt
