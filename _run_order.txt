@@ -1,0 +1,4 @@
+uv venv _autofixai
+
+_autofixai\Scripts\activate
+
