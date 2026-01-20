@@ -32,7 +32,7 @@ def get_last_session_status(session_history):
     }
 
 
-def process_file(file_path, max_attempts=2):
+def process_file(file_path, max_attempts=5):
     log_path = get_history_log_path(file_path)
     session_history = load_history_log(log_path)
 

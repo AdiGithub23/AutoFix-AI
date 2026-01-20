@@ -5,3 +5,5 @@ _autofixai\Scripts\activate
 uv pip install -r requirements.txt
 
 uvicorn src.app:app --reload
+
+F:\_Fast Drive (H)\A2Z-AI\13-AI_Agents_with_Pure_Python\AutoFix-AI\src\runnable_files\test_calculator.py
